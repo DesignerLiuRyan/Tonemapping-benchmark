@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Tone Mapper</title>
+    </head>
+    <body>
+        <p><input type="file" id="files" multiple="" onchange="handleFiles(this.files)"/></p>
+        <p>
+            <form action="">
+                Type:
+                <select id="myType" onchange="handleToneOpTypeChange()">
+                    <option value="exponential">Exponential</option>
+                    <option value="reinhard" selected>Reinhard</option>
+                    <option value="aces" selected>ACES</option>
+                    <option value="Uncharted2" selected>Uncharted 2</option>
+                </select>
+            </form>
+        </p>
+        <p>Gamma: <input id="myGamma" type="number" value="2.2" step="0.1" onchange="handleToneParamChange()"/></p>
+        <p><a id="myMultiplierLabel">Multiplier: </a><input id="myMultiplier" step="0.1" type="number" value="1.0" onchange="handleToneParamChange()"/></p>
+        <p>Burn value: <input id="myBurn" type="number" value="1.0" step="0.1" onchange="handleToneParamChange()"/></p>
+        <p>Bright multiplier: <input id="myBright" type="number" value="1.0" step="0.1" disabled="true" onchange="handleToneParamChange()"/></p>
+        <p>Contrast: <input id="myContrast" type="number" value="0.0" step="0.1" onchange="handleToneParamChange()"/></p>
+        <p><canvas id="myCanvas" width="1024" height="768"></canvas></p>
+        <script type="text/javascript">
+            var Module = {
+                TOTAL_MEMORY : 256 * 1024 * 1024
+            }
+        </script>
+        <script src="tinyexr.js"></script>
+        <script src="ToneMapper.js"></script>
+        <script type="text/javascript">
+            var floatData = null;
+            var imageWidth = 0;
+            var imageHeight = 0;
+            function handleToneParamChange()
+            {
+                if (floatData == null)
+                    return;
+
+                var toneOpSelect = document.getElementById('myType');
+                var toneOpType = toneOpSelect.options[toneOpSelect.selectedIndex].value;
+                var gammaValue = parseFloat(document.getElementById('myGamma').value);
+                var multiplierValue = parseFloat(document.getElementById('myMultiplier').value);
+                var burnValue = parseFloat(document.getElementById('myBurn').value);
+                var contrastValue = parseFloat(document.getElementById('myContrast').value);
+
+                var brightValue = parseFloat(document.getElementById('myBright').value);
+                var image8Array = new Uint8ClampedArray(imgWidth * imgHeight * 4);
+                for (var j = 0; j < imgHeight; ++j)
+                {
+                    for (var i = 0; i < imgWidth; ++i)
+                    {
+                        var intensity = clamp(luminance(
+                            floatData[(j * imgWidth + i) * 4 + 0], 
+                            floatData[(j * imgWidth + i) * 4 + 1], 
+                            floatData[(j * imgWidth + i) * 4 + 2]), 0.0, 1.0);
+                        image8Array[(j * imgWidth + i) * 4 + 0] = convertLDR(floatData[(j * imgWidth + i) * 4 + 0], multiplierValue, burnValue, gammaValue, contrastValue, toneOpType, brightValue, intensity);
+                        image8Array[(j * imgWidth + i) * 4 + 1] = convertLDR(floatData[(j * imgWidth + i) * 4 + 1], multiplierValue, burnValue, gammaValue, contrastValue, toneOpType, brightValue, intensity);
+                        image8Array[(j * imgWidth + i) * 4 + 2] = convertLDR(floatData[(j * imgWidth + i) * 4 + 2], multiplierValue, burnValue, gammaValue, contrastValue, toneOpType, brightValue, intensity);
+                        image8Array[(j * imgWidth + i) * 4 + 3] = convertAlpha(floatData[(j * imgWidth + i) * 4 + 3]);
+                    }
+                }
+                var imageData = new ImageData(image8Array, imgWidth, imgHeight);
+
+                var canvas = document.getElementById('myCanvas');
+                var ctx = canvas.getContext('2d');
+                ctx.putImageData(imageData, 0, 0);
+            }
+            function handleToneOpTypeChange()
+            {
+                var toneOpSelect = document.getElementById('myType');
+                var toneOpType = toneOpSelect.options[toneOpSelect.selectedIndex].value;
+                if (toneOpType == "reinhard")
+                {
+                    document.getElementById('myMultiplierLabel').text = "Multiplier: ";
+                    document.getElementById('myBurn').disabled = "true";
+                    document.getElementById('myBright').disabled = "true";
+
+                }
+                else if(toneOpType == "exponential")
+                {
+                    document.getElementById('myMultiplierLabel').text = "Dark multiplier: ";
+                    document.getElementById('myBurn').disabled = "true";
+                    document.getElementById('myBright').disabled = "";
+
+                }
+                else if(toneOpType == "aces")
+                {
+                    document.getElementById('myMultiplierLabel').text = "Adapted_lum: ";
+                    document.getElementById('myBurn').disabled = "true";
+                    document.getElementById('myBright').disabled = "";
+
+                }
+                else
+                {
+                    document.getElementById('myMultiplierLabel').disabled = "true";
+                    document.getElementById('myMultiplierLabel').text = "adapted_lum: ";
+                    document.getElementById('myBurn').disabled = "";
+                    document.getElementById('myBright').disabled = "true";
+
+                }
+                handleToneParamChange();
+            }
+            function handleFiles(files)
+            {
+                if (files.length == 0)
+                    return;
+
+                var file = files[0];
+                var reader = new FileReader();
+                reader.onload = (function (theFile) {
+                    return function (e) {
+                        var data = e.target.result;
+                        var exrImg = new Module.EXRLoader(data);
+                        if (exrImg.ok())
+                        {
+                            imgWidth = exrImg.width();
+                            imgHeight = exrImg.height();
+                            var canvas = document.getElementById('myCanvas');
+                            canvas.width = imgWidth;
+                            canvas.height = imgHeight;
+                            var rawData = exrImg.getBytes();
+                            floatData = new Float32Array(rawData);
+                            handleToneParamChange();
+                        }
+                  };
+                })(file);
+                reader.readAsArrayBuffer(file);
+            }
+        </script>
+    </body>
+</html>
+
+
+
+
+
+
+
